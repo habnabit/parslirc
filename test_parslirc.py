@@ -55,10 +55,17 @@ def test_tags_parsing():
 def test_message_parsing():
     parse = stringParserFromRule('message')
 
+    assert parse(':Angel PING') == ({}, 'Angel', 'PING', [])
     assert parse(':Angel PRIVMSG Wiz :Hello are you receiving this message ?') == (
         {}, 'Angel', 'PRIVMSG', ['Wiz', 'Hello are you receiving this message ?'])
     assert parse('@t=1319042451 :Angel PRIVMSG Wiz :Hello are you receiving this message ?') == (
         {'t': '1319042451'}, 'Angel', 'PRIVMSG', ['Wiz', 'Hello are you receiving this message ?'])
+
+    parsed = parse('@t=1319042451 :Angel PRIVMSG Wiz :Hello are you receiving this message ?')
+    assert parsed.tags == {'t': '1319042451'}
+    assert parsed.prefix == 'Angel'
+    assert parsed.command == 'PRIVMSG'
+    assert parsed.params == ['Wiz', 'Hello are you receiving this message ?']
 
 def test_ircState(transport):
     p = parslirc.IRCClient()

@@ -11,17 +11,17 @@ space = ' '+
 nonColon = anything:x ?(x != ':')
 nonSpace = anything:x ?(x != ' ')
 nonLineEnd = anything:x ?(x not in '\r\n')
-command = <nonSpace+>:command space -> command
-params = space* ( <nonColon nonSpace*>:param params:params -> [param] + params
-                | ':' <nonLineEnd*>:param -> [param]
-                | -> [])
+command = <nonSpace+>
+
+spaceDelimitedParams = (<nonColon nonSpace*>:param space? -> param)*
+tailAsList = (':' <nonLineEnd*>)?:tail -> [tail] if tail is not None else []
+params = space? spaceDelimitedParams:params tailAsList:tail -> params + tail
 
 tagKey = <(anything:x ?(x in tagKeyCharacters))+>
 tagValue = <(anything:x ?(x not in '\r\n; '))+>
-tag = tagKey:key ( '=' tagValue:value -> value
+tag = tagKey:key ( '=' tagValue
                  | -> None):value -> (key, value)
-tagsBuilder = ( tag:tag ';' tagsBuilder:tags -> [tag] + tags
-              | tag:tag -> [tag]
+tagsBuilder = ( tag:tag (';' tag)*:tags -> [tag] + tags
               | -> [])
 tags = ( '@' tagsBuilder:tags ' ' -> dict(tags)
        | -> {})
