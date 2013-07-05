@@ -1,3 +1,5 @@
+import unittest
+
 from twisted.test.proto_helpers import StringTransport
 
 import parsley
@@ -97,8 +99,87 @@ def test_ircSender_sendCommand(transport):
         s.sendCommand('spam', ['eggs and spam', 'spam'])
 
 
+def test_ircSender_setNick(transport):
+    s = parslirc.IRCSender(transport)
+    s.setNick('spam')
+    assert transport.value() == 'NICK :spam\r\n'
 
-def test_ircState(transport):
-    p = parslirc.IRCClient()
-    p.makeConnection(transport)
-    p.dataReceived('@t=1319042451 :Angel PRIVMSG Wiz :Hello are you receiving this message ?\r\n')
+
+def test_ircSender_sendInitialGreeting(transport):
+    s = parslirc.IRCSender(transport)
+
+    s.sendInitialGreeting('a', 'b', 'c')
+    assert transport.value() == 'NICK :a\r\nUSER b b b :c\r\n'
+    transport.clear()
+
+    s.sendInitialGreeting('a', 'b', 'spam eggs')
+    assert transport.value() == 'NICK :a\r\nUSER b b b :spam eggs\r\n'
+    transport.clear()
+
+    s.sendInitialGreeting('a', 'b', 'spam eggs', 'eggs spam')
+    assert transport.value() == 'PASS :eggs spam\r\nNICK :a\r\nUSER b b b :spam eggs\r\n'
+
+
+class FakeDispatchee(object):
+    def __init__(self):
+        self.commands = []
+
+    def irc_SPAM(self, line):
+        self.commands.append(('spam', line))
+
+    def irc_EGGS(self, line):
+        self.commands.append(('eggs', line))
+
+    def unknownCommand(self, line):
+        self.commands.append(('unknown', line))
+
+def test_IRCDispatcher():
+    fake = FakeDispatchee()
+    d = parslirc.IRCDispatcher(fake)
+    d.receivedLine(parslirc._IRCLine({}, 'spam.freenode.net', 'SPAM', ['eggs']))
+    d.receivedLine(parslirc._IRCLine({}, 'eggs.freenode.net', 'EGGS', ['spam']))
+    d.receivedLine(parslirc._IRCLine({}, 'spam-eggs.freenode.net', 'SPAMEGGS', []))
+    assert fake.commands == [
+        ('spam', ({}, 'spam.freenode.net', 'SPAM', ['eggs'])),
+        ('eggs', ({}, 'eggs.freenode.net', 'EGGS', ['spam'])),
+        ('unknown', ({}, 'spam-eggs.freenode.net', 'SPAMEGGS', [])),
+    ]
+
+
+class FakeBaseIRCFunctionalityWrapped(object):
+    nickname = 'a'
+    username = 'b'
+    realname = 'spam eggs'
+
+    def __init__(self, sender):
+        self.sender = sender
+        self.hasConnected = False
+        self.hasSignedOn = False
+
+    def connectionMade(self):
+        self.hasConnected = True
+
+    def signedOn(self):
+        self.hasSignedOn = True
+
+class BaseIRCFunctionalityTestCase(unittest.TestCase):
+    def setUp(self):
+        self.transport = transport()
+        self.sender = parslirc.IRCSender(self.transport)
+        self.fake = FakeBaseIRCFunctionalityWrapped(self.sender)
+        self.funct = parslirc.BaseIRCFunctionality(self.fake)
+
+    def test_ping(self):
+        self.funct.irc_PING(parslirc._IRCLine({}, 'irc-server', 'PING', ['nonce']))
+        assert self.transport.value() == 'PONG :nonce\r\n'
+
+    def test_signedOn(self):
+        assert not self.fake.hasSignedOn
+        self.funct.irc_001(parslirc._IRCLine({}, 'irc-server', '001', ['yo']))
+        assert self.fake.hasSignedOn
+
+    def test_connectionMade(self):
+        assert not self.fake.hasConnected
+        self.funct.connectionMade()
+        assert self.fake.hasConnected
+        assert self.transport.value() == 'NICK :a\r\nUSER b b b :spam eggs\r\n'
