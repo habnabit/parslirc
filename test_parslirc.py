@@ -67,6 +67,37 @@ def test_message_parsing():
     assert parsed.command == 'PRIVMSG'
     assert parsed.params == ['Wiz', 'Hello are you receiving this message ?']
 
+def test_ircSender_sendLine(transport):
+    s = parslirc.IRCSender(transport)
+    s.sendLine('spam eggs')
+    assert transport.value() == 'spam eggs\r\n'
+    s.sendLine('spam spam spam')
+    assert transport.value() == 'spam eggs\r\nspam spam spam\r\n'
+
+def test_ircSender_sendCommand(transport):
+    s = parslirc.IRCSender(transport)
+
+    s.sendCommand('spam', [])
+    assert transport.value() == 'spam\r\n'
+    transport.clear()
+
+    s.sendCommand('spam', ['eggs'])
+    assert transport.value() == 'spam :eggs\r\n'
+    transport.clear()
+
+    s.sendCommand('spam', ['spam', 'spam'])
+    assert transport.value() == 'spam spam :spam\r\n'
+    transport.clear()
+
+    s.sendCommand('spam', ['spam', 'spam', 'spam spam spam'])
+    assert transport.value() == 'spam spam spam :spam spam spam\r\n'
+    transport.clear()
+
+    with pytest.raises(ValueError):
+        s.sendCommand('spam', ['eggs and spam', 'spam'])
+
+
+
 def test_ircState(transport):
     p = parslirc.IRCClient()
     p.makeConnection(transport)

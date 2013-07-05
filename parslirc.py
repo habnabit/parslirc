@@ -1,7 +1,7 @@
 import collections
 import string
 
-from parsley import makeProtocol
+import parsley
 
 
 ircGrammar = r"""
@@ -41,11 +41,27 @@ tagKeyCharacters = set(string.letters + string.digits + '-/')
 _IRCLine = collections.namedtuple('_IRCLine', 'tags prefix command params')
 bindings = dict(_IRCLine=_IRCLine, tagKeyCharacters=tagKeyCharacters)
 
+
 class IRCSender(object):
     def __init__(self, transport):
         self.transport = transport
 
-class IRCReceiver(object):
+    def sendLine(self, line):
+        self.transport.write('%s\r\n' % (line,))
+
+    def sendCommand(self, command, arguments):
+        if not arguments:
+            self.sendLine(command)
+        elif len(arguments) == 1:
+            self.sendLine('%s :%s' % (command, arguments[0]))
+        else:
+            if any(' ' in argument for argument in arguments[:-1]):
+                raise ValueError('only the last argument can contain spaces')
+            self.sendLine('%s %s :%s' % (
+                command, ' '.join(arguments[:-1]), arguments[-1]))
+
+
+class NullIRCReceiver(object):
     def __init__(self, sender, parser):
         self.sender = sender
         self.parser = parser
@@ -59,4 +75,4 @@ class IRCReceiver(object):
     def receivedLine(self, message):
         raise message
 
-IRCClient = makeProtocol(ircGrammar, IRCSender, IRCReceiver, bindings)
+IRCClient = parsley.makeProtocol(ircGrammar, IRCSender, NullIRCReceiver, bindings)
