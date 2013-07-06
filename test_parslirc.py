@@ -69,6 +69,16 @@ def test_message_parsing():
     assert parsed.command == 'PRIVMSG'
     assert parsed.params == ['Wiz', 'Hello are you receiving this message ?']
 
+def test_IRCUser():
+    parsed = parslirc.IRCUser.fromFull('foo!bar@baz')
+    assert parsed == ('foo', 'bar', 'baz', 'foo!bar@baz')
+    assert parsed.nick == 'foo'
+    assert parsed.user == 'bar'
+    assert parsed.host == 'baz'
+    assert parsed.full == 'foo!bar@baz'
+
+    assert parslirc.IRCUser.fromFull('*!*@*') == ('*', '*', '*', '*!*@*')
+
 def test_ircSender_sendLine(transport):
     s = parslirc.IRCSender(transport)
     s.sendLine('spam eggs')

@@ -42,6 +42,14 @@ _IRCLine = collections.namedtuple('_IRCLine', 'tags prefix command params')
 bindings = dict(_IRCLine=_IRCLine, tagKeyCharacters=tagKeyCharacters)
 
 
+class IRCUser(collections.namedtuple('IRCUser', 'nick user host full')):
+    @classmethod
+    def fromFull(cls, full):
+        nick, _, userhost = full.partition('!')
+        user, _, host = userhost.partition('@')
+        return cls(nick, user, host, full)
+
+
 class IRCSender(object):
     def __init__(self, transport):
         self.transport = transport
