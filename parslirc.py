@@ -102,6 +102,12 @@ class NullIRCReceiver(object):
     def unknownCommand(self, line):
         pass
 
+    def userJoined(self, line, user, channel):
+        pass
+
+    def messageReceived(self, line, user, target, message):
+        pass
+
 
 class WrapperBase(object):
     def __init__(self, wrapped):
@@ -128,6 +134,14 @@ class BaseIRCFunctionality(WrapperBase):
 
     def irc_001(self, line):
         self.w.signedOn()
+
+    def irc_JOIN(self, line):
+        self.w.userJoined(line, IRCUser.fromFull(line.prefix), line.params[0])
+
+    def irc_PRIVMSG(self, line):
+        self.w.receivedMessage(
+            line, IRCUser.fromFull(line.prefix), line.params[0],
+            line.params[1])
 
 
 class CAPNegotiator(WrapperBase):
