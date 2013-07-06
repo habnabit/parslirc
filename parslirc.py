@@ -82,6 +82,9 @@ class NullIRCReceiver(object):
     nickname = 'parslirc'
     username = 'parslirc'
     realname = 'parslirc'
+    password = None
+
+    capExtensions = []
 
     def __init__(self, sender, parser):
         self.sender = sender
@@ -117,7 +120,7 @@ class IRCDispatcher(WrapperBase):
 class BaseIRCFunctionality(WrapperBase):
     def connectionMade(self):
         self.w.sender.sendInitialGreeting(
-            self.w.nickname, self.w.username, self.w.realname)
+            self.w.nickname, self.w.username, self.w.realname, self.w.password)
         self.w.connectionMade()
 
     def irc_PING(self, line):
@@ -125,6 +128,26 @@ class BaseIRCFunctionality(WrapperBase):
 
     def irc_001(self, line):
         self.w.signedOn()
+
+
+class CAPNegotiator(WrapperBase):
+    def connectionMade(self):
+        self.w.sender.sendLine('CAP LS')
+        self.w.connectionMade()
+
+    def irc_CAP(self, line):
+        if line.params[1] == 'LS':
+            supported = set(line.params[2].split())
+            toRequest = supported.intersection(self.w.capExtensions)
+            if toRequest:
+                self.w.sender.sendCommand('CAP', ['REQ', ' '.join(toRequest)])
+            else:
+                self.w.sender.sendLine('CAP END')
+        elif line.params[1] == 'ACK':
+            print line
+            self.w.sender.sendLine('CAP END')
+        else:
+            self.w.unknownCommand(line)
 
 
 IRCClient = parsley.makeProtocol(
