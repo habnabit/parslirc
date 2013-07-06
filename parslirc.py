@@ -28,7 +28,7 @@ tags = ( '@' tagsBuilder:tags ' ' -> dict(tags)
 
 prefix = ( tags:tags ':' <nonSpace+>:prefix space -> (tags, prefix)
          | -> (None, None))
-message = prefix:prefix command:command params:params -> _IRCLine._make(prefix + (command, params))
+message = prefix:prefix command:command params:params -> IRCLine._make(prefix + (command, params))
 line = message:message lineEnd -> receiver.receivedLine(message)
 
 initial = line
@@ -38,8 +38,8 @@ initial = line
 tagKeyCharacters = set(string.letters + string.digits + '-/')
 
 
-_IRCLine = collections.namedtuple('_IRCLine', 'tags prefix command params')
-bindings = dict(_IRCLine=_IRCLine, tagKeyCharacters=tagKeyCharacters)
+IRCLine = collections.namedtuple('IRCLine', 'tags prefix command params')
+bindings = dict(IRCLine=IRCLine, tagKeyCharacters=tagKeyCharacters)
 
 
 class IRCUser(collections.namedtuple('IRCUser', 'nick user host full')):

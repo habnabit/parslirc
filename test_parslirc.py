@@ -146,9 +146,9 @@ class FakeDispatchee(object):
 def test_IRCDispatcher():
     fake = FakeDispatchee()
     d = parslirc.IRCDispatcher(fake)
-    d.receivedLine(parslirc._IRCLine({}, 'spam.freenode.net', 'SPAM', ['eggs']))
-    d.receivedLine(parslirc._IRCLine({}, 'eggs.freenode.net', 'EGGS', ['spam']))
-    d.receivedLine(parslirc._IRCLine({}, 'spam-eggs.freenode.net', 'SPAMEGGS', []))
+    d.receivedLine(parslirc.IRCLine({}, 'spam.freenode.net', 'SPAM', ['eggs']))
+    d.receivedLine(parslirc.IRCLine({}, 'eggs.freenode.net', 'EGGS', ['spam']))
+    d.receivedLine(parslirc.IRCLine({}, 'spam-eggs.freenode.net', 'SPAMEGGS', []))
     assert fake.commands == [
         ('spam', ({}, 'spam.freenode.net', 'SPAM', ['eggs'])),
         ('eggs', ({}, 'eggs.freenode.net', 'EGGS', ['spam'])),
@@ -180,12 +180,12 @@ class BaseIRCFunctionalityTestCase(unittest.TestCase):
         self.funct = parslirc.BaseIRCFunctionality(self.fake)
 
     def test_ping(self):
-        self.funct.irc_PING(parslirc._IRCLine({}, 'irc-server', 'PING', ['nonce']))
+        self.funct.irc_PING(parslirc.IRCLine({}, 'irc-server', 'PING', ['nonce']))
         assert self.transport.value() == 'PONG :nonce\r\n'
 
     def test_signedOn(self):
         assert not self.fake.hasSignedOn
-        self.funct.irc_001(parslirc._IRCLine({}, 'irc-server', '001', ['yo']))
+        self.funct.irc_001(parslirc.IRCLine({}, 'irc-server', '001', ['yo']))
         assert self.fake.hasSignedOn
 
     def test_connectionMade(self):
