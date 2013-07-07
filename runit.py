@@ -1,7 +1,7 @@
 import sys
 
 from twisted.internet.defer import Deferred
-from twisted.internet.endpoints import TCP4ClientEndpoint
+from twisted.internet.endpoints import clientFromString
 from twisted.internet.protocol import Factory
 from twisted.internet.task import react
 from twisted.protocols import policies
@@ -13,6 +13,8 @@ import parslirc
 
 
 class SpewingWrapper(parslirc.WrapperBase):
+    capExtensions = ['znc.in/server-time']
+
     def unknownCommand(self, line):
         print line
 
@@ -21,10 +23,11 @@ IRCClient = parsley.makeProtocol(
     parslirc.ircGrammar,
     parslirc.IRCSender,
     parsley.stackReceivers(
-        parslirc.NullIRCReceiver,
-        SpewingWrapper,
-        parslirc.BaseIRCFunctionality,
         parslirc.IRCDispatcher,
+        parslirc.CAPNegotiator,
+        parslirc.BaseIRCFunctionality,
+        SpewingWrapper,
+        parslirc.NullIRCReceiver,
     ),
     parslirc.bindings)
 
@@ -33,10 +36,11 @@ class IRCClientFactory(Factory):
     protocol = IRCClient
 
 
-def main(reactor):
-    client = TCP4ClientEndpoint(reactor, 'irc.freenode.net', 6667)
-    d = client.connect(IRCClientFactory())
+def main(reactor, description):
+    client = clientFromString(reactor, description)
+    d = client.connect(policies.SpewingFactory(IRCClientFactory()))
     d.addCallback(lambda p: Deferred())
     return d
 
-react(main, [])
+log.startLogging(sys.stderr)
+react(main, sys.argv[1:])
