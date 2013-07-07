@@ -15,8 +15,14 @@ import parslirc
 class SpewingWrapper(parslirc.WrapperBase):
     capExtensions = ['znc.in/server-time']
 
+    def signedOn(self):
+        self.sender.join('#colontea')
+
     def unknownCommand(self, line):
         print line
+
+    def unknownCTCP(self, line, command, params):
+        print line, command, params
 
 
 IRCClient = parsley.makeProtocol(
@@ -24,6 +30,7 @@ IRCClient = parsley.makeProtocol(
     parslirc.IRCSender,
     parsley.stackReceivers(
         parslirc.IRCDispatcher,
+        parslirc.CTCPDispatcher,
         parslirc.CAPNegotiator,
         parslirc.BaseIRCFunctionality,
         SpewingWrapper,

@@ -77,6 +77,21 @@ class IRCSender(object):
         self.setNick(nick)
         self.sendCommand('USER', [username, username, username, realname])
 
+    def join(self, channels, keys=''):
+        self.sendCommand('JOIN', [channels, keys])
+
+    def leave(self, target, reason=''):
+        self.sendCommand('PART', [target, reason])
+
+    def quit(self, message=''):
+        self.sendCommand('QUIT', [message])
+
+    def names(self, channel):
+        self.sendCommand('NAMES', [channel])
+
+    def privmsg(self, target, message):
+        self.sendCommand('PRIVMSG', [target, message])
+
 
 class NullIRCReceiver(object):
     nickname = 'parslirc'
@@ -102,10 +117,28 @@ class NullIRCReceiver(object):
     def unknownCommand(self, line):
         pass
 
+    def unknownCTCP(self, line, command, params):
+        pass
+
+    def joined(self, line, channel):
+        pass
+
     def userJoined(self, line, user, channel):
         pass
 
-    def messageReceived(self, line, user, target, message):
+    def left(self, line, channel, reason):
+        pass
+
+    def userLeft(self, line, user, channel, reason):
+        pass
+
+    def userQuit(self, line, user, message):
+        pass
+
+    def privmsg(self, line, user, target, message):
+        pass
+
+    def action(self, line, user, target, message):
         pass
 
 
@@ -123,6 +156,19 @@ class IRCDispatcher(WrapperBase):
         handler(line)
 
 
+class CTCPDispatcher(WrapperBase):
+    def irc_PRIVMSG(self, line):
+        message = line.params[1]
+        if not (message.startswith('\x01') and message.endswith('\x01')):
+            return self.w.irc_PRIVMSG(line)
+        command, _, arguments = message[1:-1].partition(' ')
+        handler = getattr(self.w, 'ctcp_' + command.upper(), None)
+        if handler is None:
+            self.w.unknownCTCP(line, command, arguments)
+        else:
+            handler(line, arguments)
+
+
 class BaseIRCFunctionality(WrapperBase):
     def connectionMade(self):
         self.w.sender.sendInitialGreeting(
@@ -136,12 +182,38 @@ class BaseIRCFunctionality(WrapperBase):
         self.w.signedOn()
 
     def irc_JOIN(self, line):
-        self.w.userJoined(line, IRCUser.fromFull(line.prefix), line.params[0])
+        user = IRCUser.fromFull(line.prefix)
+        if user.nick == self.nickname:
+            self.w.joined(line, line.params[0])
+        else:
+            self.w.userJoined(line, user, line.params[0])
+
+    def irc_PART(self, line):
+        user = IRCUser.fromFull(line.prefix)
+        if user.nick == self.nickname:
+            self.w.left(line, line.params[0])
+        else:
+            self.w.userLeft(line, user, line.params[0])
+
+    def irc_NICK(self, line):
+        user = IRCUser.fromFull(line.prefix)
+        if user.nick == self.nickname:
+            self.nickname = line.params[0]
+            self.w.nickChanged(line, line.params[0])
+        else:
+            self.w.userRenamed(line, user, line.params[0])
+
+    def irc_QUIT(self, line):
+        self.w.userQuit(line, IRCUser.fromFull(line.prefix), line.params[0])
 
     def irc_PRIVMSG(self, line):
-        self.w.receivedMessage(
+        self.w.privmsg(
             line, IRCUser.fromFull(line.prefix), line.params[0],
             line.params[1])
+
+    def ctcp_ACTION(self, line, arguments):
+        self.w.action(
+            line, IRCUser.fromFull(line.prefix), line.params[0], arguments)
 
 
 class CAPNegotiator(WrapperBase):
