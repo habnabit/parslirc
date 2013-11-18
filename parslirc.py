@@ -8,16 +8,18 @@ ircGrammar = r"""
 
 lineEnd = '\r' '\n'
 space = ' '+
-nonColon = anything:x ?(x != ':')
-nonSpace = anything:x ?(x != ' ')
-nonLineEnd = anything:x ?(x not in '\r\n')
+nonColon = ~':' nonLineEnd
+nonEquals = ~'=' nonLineEnd
+nonComma = ~',' nonLineEnd
+nonSpace = ~' ' nonLineEnd
+nonLineEnd = ~('\r' | '\n') anything
 command = <nonSpace+>
 
 spaceDelimitedParams = (<nonColon nonSpace*>:param space? -> param)*
 tailAsList = (':' <nonLineEnd*>)?:tail -> [tail] if tail is not None else []
 params = space? spaceDelimitedParams:params tailAsList:tail -> params + tail
 
-tagKey = <(anything:x ?(x in tagKeyCharacters))+>
+tagKey = <(anything:x ?(x in tagKeyCharacters or x in '\r\n'))+>
 tagValue = <(anything:x ?(x not in '\r\n; '))+>
 tag = tagKey:key ( '=' tagValue
                  | -> None):value -> (key, value)
@@ -33,21 +35,52 @@ line = message:message lineEnd -> receiver.receivedLine(message)
 
 initial = line
 
+
+prefixParamParenPart = '(' <(~')' anything)*>:modes ')' -> (len(modes), modes)
+prefixParam = prefixParamParenPart:(modelen, modes) <anything{modelen}>:prefixes -> dict(zip(prefixes, modes))
+
+modePrefix = ('+' | '-'):prefix -> prefix == '+'
+mode = modePrefix:prefix <(~modePrefix anything)*>:modes -> (prefix, modes)
+modes = mode+:modes -> [(set, m) for set, ms in modes for m in ms]
+
+isupportAtom = <(~('=' | ':' | ',') nonLineEnd)+>
+isupportPair = isupportAtom:x ':' isupportAtom:y -> (x, y)
+isupportNonPair = isupportAtom:y -> (None, y)
+isupportValue = isupportPair | isupportNonPair
+isupportValueSeries = isupportValue:hd (',' isupportValue)*:tl -> [hd] + tl
+isupport = isupportAtom:key ('=' isupportValueSeries)?:value -> (key, value)
+
 """
 
 tagKeyCharacters = set(string.letters + string.digits + '-/')
-
-
 IRCLine = collections.namedtuple('IRCLine', 'tags prefix command params')
+
 bindings = dict(IRCLine=IRCLine, tagKeyCharacters=tagKeyCharacters)
 
+ircParser = parsley.makeGrammar(ircGrammar, bindings)
 
-class IRCUser(collections.namedtuple('IRCUser', 'nick user host full')):
+def parseISupport(s):
+    k, v = ircParser(s).isupport()
+    if v is not None:
+        pairCount = sum(1 for x, y in v if x is not None)
+        if pairCount == 0:
+            v = [y for x, y in v]
+        elif pairCount == len(v):
+            v = dict(v)
+    return k, v
+
+
+class IRCUser(collections.namedtuple('IRCUser', 'prefixes nick user host full')):
     @classmethod
-    def fromFull(cls, full):
+    def fromFull(cls, full, prefixCharacters=None):
         nick, _, userhost = full.partition('!')
         user, _, host = userhost.partition('@')
-        return cls(nick, user, host, full)
+        prefixes = ()
+        if prefixCharacters is not None:
+            unadornedNick = nick.lstrip(prefixCharacters)
+            prefixes = tuple(nick[:len(nick) - len(unadornedNick)])
+            nick = unadornedNick
+        return cls(prefixes, nick, user, host, full)
 
 
 class IRCSender(object):

@@ -7,7 +7,7 @@ import parslirc
 import pytest
 
 
-parslircGrammar = parsley.makeGrammar(parslirc.ircGrammar, parslirc.bindings)
+parslircGrammar = parslirc.ircParser
 
 @pytest.fixture
 def transport():
@@ -17,8 +17,8 @@ def transport():
 
 
 def stringParserFromRule(rule):
-    def parseString(s):
-        return getattr(parslircGrammar(s), rule)()
+    def parseString(s, *a, **kw):
+        return getattr(parslircGrammar(s), rule)(*a, **kw)
     return parseString
 
 def test_params_parsing():
@@ -69,15 +69,46 @@ def test_message_parsing():
     assert parsed.command == 'PRIVMSG'
     assert parsed.params == ['Wiz', 'Hello are you receiving this message ?']
 
+def test_prefixParam_parsing():
+    parse = stringParserFromRule('prefixParam')
+
+    assert parse('()') == {}
+    assert parse('(ov)@+') == {'@': 'o', '+': 'v'}
+    assert parse('(ovh)@+%') == {'@': 'o', '+': 'v', '%': 'h'}
+    assert parse('(hov)%@+') == {'@': 'o', '+': 'v', '%': 'h'}
+    with pytest.raises(parsley.ParseError):
+        assert parse('(hov)%@+!')
+    with pytest.raises(parsley.ParseError):
+        assert parse('(hove)%@+')
+
+def test_modes_parsing():
+    parse = stringParserFromRule('modes')
+
+    assert parse('+foo-bar') == [(True, 'f'), (True, 'o'), (True, 'o'), (False, 'b'), (False, 'a'), (False, 'r')]
+    assert parse('+fo+o-b-ar') == [(True, 'f'), (True, 'o'), (True, 'o'), (False, 'b'), (False, 'a'), (False, 'r')]
+    assert parse('+f+o+o-b-a-r') == [(True, 'f'), (True, 'o'), (True, 'o'), (False, 'b'), (False, 'a'), (False, 'r')]
+    assert parse('+a-b+c-d') == [(True, 'a'), (False, 'b'), (True, 'c'), (False, 'd')]
+
+def test_isupport_parsing():
+    assert parslirc.parseISupport('FOO') == ('FOO', None)
+    assert parslirc.parseISupport('FOO=bar') == ('FOO', ['bar'])
+    assert parslirc.parseISupport('FOO=bar,baz') == ('FOO', ['bar', 'baz'])
+    assert parslirc.parseISupport('FOO=a:b') == ('FOO', {'a': 'b'})
+    assert parslirc.parseISupport('FOO=a:b,c:d') == ('FOO', {'a': 'b', 'c': 'd'})
+    assert parslirc.parseISupport('FOO=a:b,c:d,x') == ('FOO', [('a', 'b'), ('c', 'd'), (None, 'x')])
+
 def test_IRCUser():
     parsed = parslirc.IRCUser.fromFull('foo!bar@baz')
-    assert parsed == ('foo', 'bar', 'baz', 'foo!bar@baz')
+    assert parsed == ((), 'foo', 'bar', 'baz', 'foo!bar@baz')
+    assert parsed.prefixes == ()
     assert parsed.nick == 'foo'
     assert parsed.user == 'bar'
     assert parsed.host == 'baz'
     assert parsed.full == 'foo!bar@baz'
 
-    assert parslirc.IRCUser.fromFull('*!*@*') == ('*', '*', '*', '*!*@*')
+    assert parslirc.IRCUser.fromFull('*!*@*') == ((), '*', '*', '*', '*!*@*')
+    assert parslirc.IRCUser.fromFull('+foo!bar@baz', '@+') == (('+',), 'foo', 'bar', 'baz', '+foo!bar@baz')
+    assert parslirc.IRCUser.fromFull('@+foo!bar@baz', '@+') == (('@', '+'), 'foo', 'bar', 'baz', '@+foo!bar@baz')
 
 def test_ircSender_sendLine(transport):
     s = parslirc.IRCSender(transport)
@@ -160,6 +191,7 @@ class FakeBaseIRCFunctionalityWrapped(object):
     nickname = 'a'
     username = 'b'
     realname = 'spam eggs'
+    password = None
 
     def __init__(self, sender):
         self.sender = sender
