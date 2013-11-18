@@ -33,8 +33,6 @@ prefix = ( tags:tags ':' <nonSpace+>:prefix space -> (tags, prefix)
 message = prefix:prefix command:command params:params -> IRCLine._make(prefix + (command, params))
 line = message:message lineEnd -> receiver.receivedLine(message)
 
-initial = line
-
 
 prefixParamParenPart = '(' <(~')' anything)*>:modes ')' -> (len(modes), modes)
 prefixParam = prefixParamParenPart:(modelen, modes) <anything{modelen}>:prefixes -> dict(zip(prefixes, modes))
@@ -127,6 +125,8 @@ class IRCSender(object):
 
 
 class NullIRCReceiver(object):
+    currentRule = 'line'
+
     nickname = 'parslirc'
     username = 'parslirc'
     realname = 'parslirc'
@@ -134,9 +134,14 @@ class NullIRCReceiver(object):
 
     capExtensions = []
 
-    def __init__(self, sender, parser):
+    def __init__(self, sender):
         self.sender = sender
+
+    def prepareParsing(self, parser):
         self.parser = parser
+
+    def finishParsing(self, reason):
+        pass
 
     def connectionMade(self):
         pass
@@ -203,10 +208,10 @@ class CTCPDispatcher(WrapperBase):
 
 
 class BaseIRCFunctionality(WrapperBase):
-    def connectionMade(self):
+    def prepareParsing(self, parser):
         self.w.sender.sendInitialGreeting(
             self.w.nickname, self.w.username, self.w.realname, self.w.password)
-        self.w.connectionMade()
+        self.w.prepareParsing(parser)
 
     def irc_PING(self, line):
         self.w.sender.sendCommand('PONG', line.params)
@@ -272,5 +277,5 @@ class CAPNegotiator(WrapperBase):
 IRCClient = parsley.makeProtocol(
     ircGrammar,
     IRCSender,
-    parsley.stackReceivers(NullIRCReceiver, BaseIRCFunctionality, IRCDispatcher),
+    parsley.stack(NullIRCReceiver, BaseIRCFunctionality, IRCDispatcher),
     bindings)

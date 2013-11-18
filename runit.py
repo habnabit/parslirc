@@ -28,7 +28,7 @@ class SpewingWrapper(parslirc.WrapperBase):
 IRCClient = parsley.makeProtocol(
     parslirc.ircGrammar,
     parslirc.IRCSender,
-    parsley.stackReceivers(
+    parsley.stack(
         parslirc.IRCDispatcher,
         parslirc.CTCPDispatcher,
         parslirc.CAPNegotiator,
